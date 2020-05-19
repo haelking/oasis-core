@@ -3,15 +3,14 @@ package committee
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/opentracing/opentracing-go"
 
 	"github.com/oasislabs/oasis-core/go/common/cbor"
-	consensus "github.com/oasislabs/oasis-core/go/consensus/api"
+	"github.com/oasislabs/oasis-core/go/common/logging"
 	keymanagerApi "github.com/oasislabs/oasis-core/go/keymanager/api"
 	keymanagerClient "github.com/oasislabs/oasis-core/go/keymanager/client"
-	registry "github.com/oasislabs/oasis-core/go/registry/api"
+	"github.com/oasislabs/oasis-core/go/runtime/host"
 	"github.com/oasislabs/oasis-core/go/runtime/host/protocol"
 	"github.com/oasislabs/oasis-core/go/runtime/localstorage"
 	runtimeRegistry "github.com/oasislabs/oasis-core/go/runtime/registry"
@@ -34,31 +33,6 @@ type computeRuntimeHostHandler struct {
 }
 
 func (h *computeRuntimeHostHandler) Handle(ctx context.Context, body *protocol.Body) (*protocol.Body, error) {
-	// Key manager.
-	if body.HostKeyManagerPolicyRequest != nil {
-		rt, err := h.runtime.RegistryDescriptor(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("runtime host: failed to obtain runtime descriptor: %w", err)
-		}
-		if rt.KeyManager == nil {
-			return nil, errors.New("runtime has no key manager")
-		}
-		status, err := h.keyManager.GetStatus(ctx, &registry.NamespaceQuery{
-			ID:     *rt.KeyManager,
-			Height: consensus.HeightLatest,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		var policy keymanagerApi.SignedPolicySGX
-		if status != nil && status.Policy != nil {
-			policy = *status.Policy
-		}
-		return &protocol.Body{HostKeyManagerPolicyResponse: &protocol.HostKeyManagerPolicyResponse{
-			SignedPolicyRaw: cbor.Marshal(policy),
-		}}, nil
-	}
 	// RPC.
 	if body.HostRPCCallRequest != nil {
 		switch body.HostRPCCallRequest.Endpoint {
@@ -125,13 +99,93 @@ func (n *Node) GetRuntime() runtimeRegistry.Runtime {
 	return n.Runtime
 }
 
+// computeRuntimeHostworker is a runtime host handler suitable for compute runtimes.
+type computeRuntimeHostworker struct {
+	ctx context.Context
+
+	logger *logging.Logger
+
+	runtime    runtimeRegistry.Runtime
+	host       host.Runtime
+	keyManager keymanagerApi.Backend
+}
+
+func (h *computeRuntimeHostworker) watchPolicyUpdates() {
+	// Wait for the runtime.
+	rt, err := h.runtime.RegistryDescriptor(h.ctx)
+	if err != nil {
+		h.logger.Error("failed to wait for registry descriptor",
+			"err", err,
+		)
+		return
+	}
+	if rt.KeyManager == nil {
+		h.logger.Info("no keymanager needed, not watching for policy updates")
+		return
+	}
+
+	stCh, stSub := h.keyManager.WatchStatuses()
+	defer stSub.Close()
+	h.logger.Info("watching policy updates", "keymanager_runtime", rt.KeyManager)
+
+	for {
+		select {
+		case <-h.ctx.Done():
+			return
+		case st := <-stCh:
+			h.logger.Info("got policy update", "status", st)
+
+			// Ignore status updates if key manager is not yet known (is nil) or if the status
+			// update is for a different key manager.
+			if !st.ID.Equal(rt.KeyManager) {
+				continue
+			}
+
+			raw := cbor.Marshal(st.Policy)
+			req := &protocol.Body{RuntimeKeyManagerPolicyUpdateRequest: &protocol.RuntimeKeyManagerPolicyUpdateRequest{
+				SignedPolicyRaw: raw,
+			}}
+
+			response, err := h.host.Call(h.ctx, req)
+			if err != nil {
+				h.logger.Error("failed to dispatch RPC call to runtime",
+					"err", err,
+				)
+				continue
+			}
+
+			if response.Error != nil {
+				h.logger.Error("error from runtime",
+					"err", response.Error.Message,
+				)
+				continue
+			}
+			h.logger.Info("finished")
+		}
+	}
+}
+
+// Implements RuntimeHostHandlerFactory.
+func (n *Node) StartWorker(host host.Runtime) {
+	w := &computeRuntimeHostworker{
+		context.Background(),
+		logging.GetLogger("committee/runtime-host"),
+		n.Runtime,
+		host,
+		n.KeyManager,
+	}
+	go w.watchPolicyUpdates()
+}
+
 // Implements RuntimeHostHandlerFactory.
 func (n *Node) NewRuntimeHostHandler() protocol.Handler {
-	return &computeRuntimeHostHandler{
+	handler := &computeRuntimeHostHandler{
 		n.Runtime,
 		n.Runtime.Storage(),
 		n.KeyManager,
 		n.KeyManagerClient,
 		n.Runtime.LocalStorage(),
 	}
+
+	return handler
 }

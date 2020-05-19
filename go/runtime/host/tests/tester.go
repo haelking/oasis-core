@@ -10,11 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/oasislabs/oasis-core/go/common/cbor"
-	"github.com/oasislabs/oasis-core/go/common/crypto/signature"
 	"github.com/oasislabs/oasis-core/go/common/logging"
-	"github.com/oasislabs/oasis-core/go/common/sgx"
-	keymanager "github.com/oasislabs/oasis-core/go/keymanager/api"
 	"github.com/oasislabs/oasis-core/go/runtime/host"
 	"github.com/oasislabs/oasis-core/go/runtime/host/protocol"
 )
@@ -28,30 +24,6 @@ type mockMessageHandler struct{}
 
 // Implements host.Handler.
 func (h *mockMessageHandler) Handle(ctx context.Context, body *protocol.Body) (*protocol.Body, error) {
-	// Key manager.
-	if body.HostKeyManagerPolicyRequest != nil {
-		// Generate a dummy key manager policy for tests.
-		policy := keymanager.PolicySGX{
-			Serial:   1,
-			Enclaves: map[sgx.EnclaveIdentity]*keymanager.EnclavePolicySGX{},
-		}
-		sigPolicy := keymanager.SignedPolicySGX{
-			Policy: policy,
-		}
-		for _, signer := range keymanager.TestSigners[1:] {
-			sig, err := signature.Sign(signer, keymanager.PolicySGXSignatureContext, cbor.Marshal(policy))
-			if err != nil {
-				return nil, fmt.Errorf("failed to sign mock policy: %w", err)
-			}
-
-			sigPolicy.Signatures = append(sigPolicy.Signatures, *sig)
-		}
-
-		return &protocol.Body{HostKeyManagerPolicyResponse: &protocol.HostKeyManagerPolicyResponse{
-			SignedPolicyRaw: cbor.Marshal(sigPolicy),
-		}}, nil
-	}
-
 	return nil, fmt.Errorf("method not supported")
 }
 

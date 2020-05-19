@@ -291,10 +291,6 @@ func (c *connection) handleMessage(ctx context.Context, message *Message) {
 		var allowed bool
 		state := c.getState()
 		switch {
-		case state == stateInitializing:
-			// Only whitelisted methods are allowed.
-			body := message.Body
-			allowed = body.HostKeyManagerPolicyRequest != nil
 		case state == stateReady:
 			// All requests allowed.
 			allowed = true

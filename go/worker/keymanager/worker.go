@@ -128,6 +128,8 @@ func (w *Worker) GetRuntime() runtimeRegistry.Runtime {
 	return w.runtime
 }
 
+func (w *Worker) StartWorker(host host.Runtime) {}
+
 // Implements workerCommon.RuntimeHostHandlerFactory.
 func (w *Worker) NewRuntimeHostHandler() protocol.Handler {
 	return w.runtimeHostHandler

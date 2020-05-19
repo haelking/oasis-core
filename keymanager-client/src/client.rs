@@ -9,11 +9,11 @@ use futures::{future, prelude::*};
 use grpcio::Channel;
 use io_context::Context;
 use lru::LruCache;
-#[cfg(target_env = "sgx")]
 use std::iter::FromIterator;
 
+use oasis_core_runtime::common::cbor;
 #[cfg(target_env = "sgx")]
-use oasis_core_runtime::{common::cbor, protocol::ProtocolError, types::Body};
+use oasis_core_runtime::{protocol::ProtocolError, types::Body};
 
 use oasis_core_client::{create_rpc_api_client, BoxFuture, RpcClient};
 use oasis_core_keymanager_api_common::*;
@@ -84,9 +84,6 @@ impl RemoteClient {
     }
 
     /// Create a new key manager client with runtime-internal transport.
-    ///
-    /// Using this method automatically obtains valid key manager enclave identities via the
-    /// worker-host protocol.
     pub fn new_runtime(
         runtime_id: RuntimeId,
         protocol: Arc<Protocol>,
@@ -101,33 +98,12 @@ impl RemoteClient {
         let _ = signers;
 
         #[cfg(target_env = "sgx")]
-        let enclaves: Option<HashSet<EnclaveIdentity>> = match protocol
-            .make_request(Context::background(), Body::HostKeyManagerPolicyRequest {})
-        {
-            Ok(Body::HostKeyManagerPolicyResponse { signed_policy_raw }) => {
-                let untrusted_policy: SignedPolicySGX = match cbor::from_slice(&signed_policy_raw) {
-                    Ok(sp) => sp,
-                    Err(err) => panic!("error obtaining list of KM enclaves: {}", err),
-                };
-                let policy = untrusted_policy
-                    .verify()
-                    .expect("failed to verify KM policy");
-                Some(HashSet::from_iter(policy.enclaves.keys().cloned()))
-            }
-            Ok(_) => panic!(ProtocolError::InvalidResponse),
-            Err(_) => panic!("cannot obtain list of KM enclaves"),
-        };
-
+        let enclaves = Some(HashSet::new());
         #[cfg(not(target_env = "sgx"))]
         let enclaves = None;
 
-        Self::new_runtime_with_enclave_identities(
-            runtime_id,
-            enclaves,
-            protocol,
-            rak,
-            keys_cache_sizes,
-        )
+
+        Self::new_runtime_with_enclave_identities(runtime_id, enclaves, protocol, rak, keys_cache_sizes)
     }
 
     /// Create a new key manager client with gRPC transport.
@@ -148,6 +124,20 @@ impl RemoteClient {
             ),
             keys_cache_sizes,
         )
+    }
+
+    pub fn set_policy(&self, signed_policy_raw: Vec<u8>) -> () {
+        let untrusted_policy: SignedPolicySGX = match cbor::from_slice(&signed_policy_raw) {
+            Ok(sp) => sp,
+            Err(err) => panic!("error obtaining list of KM enclaves: {}", err),
+        };
+        let policy = untrusted_policy
+            .verify()
+            .expect("failed to verify KM policy");
+        let client = &self.inner.rpc_client.rpc_client;
+        let policies: HashSet<EnclaveIdentity> =
+            HashSet::from_iter(policy.enclaves.keys().cloned());
+        client.update_enclaves(Some(policies))
     }
 }
 

@@ -324,6 +324,14 @@ impl Protocol {
                 self.dispatcher.queue_request(ctx, id, req)?;
                 Ok(None)
             }
+            #[cfg(target_env = "sgx")]
+            req @ Body::RuntimeKeyManagerPolicyUpdateRequest { .. } => {
+                info!(self.logger, "Received key manager policy update request");
+                self.can_handle_runtime_requests()?;
+                self.dispatcher
+                    .update_runtime_keymanager_policy(ctx, id, req)?;
+                Ok(Some(Body::RuntimeKeyManagerPolicyUpdateResponse {}))
+            }
             req => {
                 warn!(self.logger, "Received unsupported request"; "req" => format!("{:?}", req));
                 Err(ProtocolError::MethodNotSupported.into())

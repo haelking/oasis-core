@@ -40,13 +40,14 @@ func (n *RuntimeHostNode) ProvisionHostedRuntime(ctx context.Context) (host.Runt
 	if !ok {
 		return nil, fmt.Errorf("missing runtime host configuration for runtime '%s'", rt.ID)
 	}
-	cfg.MessageHandler = n.factory.NewRuntimeHostHandler()
 
 	// Provision the runtime.
+	cfg.MessageHandler = n.factory.NewRuntimeHostHandler()
 	prt, err := provisioner.NewRuntime(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to provision runtime: %w", err)
 	}
+	n.factory.StartWorker(prt)
 
 	n.Lock()
 	n.runtime = prt
@@ -71,6 +72,9 @@ type RuntimeHostHandlerFactory interface {
 
 	// NewRuntimeHostHandler creates a new runtime host handler.
 	NewRuntimeHostHandler() protocol.Handler
+
+	// StartWorker starts the worker
+	StartWorker(host host.Runtime)
 }
 
 // NewRuntimeHostNode creates a new runtime host node.

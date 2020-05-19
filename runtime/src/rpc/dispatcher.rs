@@ -130,6 +130,8 @@ pub struct Dispatcher {
     methods: HashMap<String, Method>,
     /// Registered local RPC methods.
     local_methods: HashMap<String, Method>,
+    /// Registered keymanager policy handler. TODO: type.
+    km_policy_handler: Option<Box<dyn Fn(Vec<u8>) -> ()>>,
     /// Registered context initializer.
     ctx_initializer: Option<Box<dyn ContextInitializer>>,
 }
@@ -140,6 +142,7 @@ impl Dispatcher {
         Self {
             methods: HashMap::new(),
             local_methods: HashMap::new(),
+            km_policy_handler: None,
             ctx_initializer: None,
         }
     }
@@ -210,5 +213,17 @@ impl Dispatcher {
                 body: Body::Error(format!("{}", error)),
             },
         }
+    }
+
+    pub fn handle_km_policy_update(&self, signed_policy_raw: Vec<u8>) -> () {
+        match &self.km_policy_handler {
+            Some(handler) => handler(signed_policy_raw),
+            None => (),
+        }
+    }
+
+    /// KeyManager policy update handler.
+    pub fn set_keymanager_policy_update_handler(&mut self, f: Box<dyn Fn(Vec<u8>) -> ()>) -> () {
+        self.km_policy_handler = Some(f);
     }
 }
