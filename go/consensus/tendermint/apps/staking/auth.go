@@ -8,6 +8,7 @@ import (
 	"github.com/oasislabs/oasis-core/go/consensus/tendermint/abci"
 	abciAPI "github.com/oasislabs/oasis-core/go/consensus/tendermint/api"
 	stakingState "github.com/oasislabs/oasis-core/go/consensus/tendermint/apps/staking/state"
+	staking "github.com/oasislabs/oasis-core/go/staking/api"
 )
 
 var _ abci.TransactionAuthHandler = (*stakingApplication)(nil)
@@ -19,7 +20,8 @@ func (app *stakingApplication) GetSignerNonce(ctx context.Context, req *api.GetS
 		return 0, err
 	}
 
-	acct, err := q.AccountInfo(ctx, req.ID)
+	acctID := staking.NewIDFromPublicKey(req.ID)
+	acct, err := q.AccountInfo(ctx, acctID)
 	if err != nil {
 		return 0, err
 	}

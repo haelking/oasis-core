@@ -30,10 +30,10 @@ type delegation struct {
 	accounts []struct {
 		signer        signature.Signer
 		reckonedNonce uint64
-		delegatedTo   signature.PublicKey
+		delegatedTo   staking.ID
 		debondEndTime uint64
 	}
-	fundingAccount signature.Signer
+	fundingAccount staking.ID
 }
 
 func (d *delegation) doEscrowTx(ctx context.Context, rng *rand.Rand, cnsc consensus.ClientBackend) error {
@@ -48,7 +48,7 @@ func (d *delegation) doEscrowTx(ctx context.Context, rng *rand.Rand, cnsc consen
 	// Select an account that has no active delegations nor debonding funds.
 	perm := rng.Perm(delegationNumAccounts)
 	fromPermIdx := -1
-	var empty signature.PublicKey
+	var empty staking.ID
 	for i := range d.accounts {
 		if d.accounts[perm[i]].delegatedTo == empty && d.accounts[perm[i]].debondEndTime < uint64(epoch) {
 			fromPermIdx = i
@@ -67,7 +67,7 @@ func (d *delegation) doEscrowTx(ctx context.Context, rng *rand.Rand, cnsc consen
 	selectedIdx := perm[fromPermIdx]
 
 	// Update local state.
-	d.accounts[selectedIdx].delegatedTo = d.accounts[perm[toPermIdx]].signer.Public()
+	d.accounts[selectedIdx].delegatedTo = staking.NewIDFromPublicKey(d.accounts[perm[toPermIdx]].signer.Public())
 
 	// Create escrow tx.
 	escrow := &staking.Escrow{

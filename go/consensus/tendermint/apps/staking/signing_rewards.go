@@ -7,6 +7,7 @@ import (
 	abciAPI "github.com/oasislabs/oasis-core/go/consensus/tendermint/api"
 	stakingState "github.com/oasislabs/oasis-core/go/consensus/tendermint/apps/staking/state"
 	epochtime "github.com/oasislabs/oasis-core/go/epochtime/api"
+	staking "github.com/oasislabs/oasis-core/go/staking/api"
 )
 
 func (app *stakingApplication) updateEpochSigning(
@@ -57,12 +58,19 @@ func (app *stakingApplication) rewardEpochSigning(ctx *abciAPI.Context, time epo
 		return nil
 	}
 
-	eligibleEntities, err := epochSigning.EligibleEntities(params.SigningRewardThresholdNumerator, params.SigningRewardThresholdDenominator)
+	eligibleEntities, err := epochSigning.EligibleEntities(
+		params.SigningRewardThresholdNumerator,
+		params.SigningRewardThresholdDenominator,
+	)
 	if err != nil {
 		return fmt.Errorf("determining eligibility: %w", err)
 	}
+	eligibleEntitiesAcctIDs := []staking.ID{}
+	for _, entity := range eligibleEntities {
+		eligibleEntitiesAcctIDs = append(eligibleEntitiesAcctIDs, staking.NewIDFromPublicKey(entity))
+	}
 
-	if err := stakeState.AddRewards(ctx, time, &params.RewardFactorEpochSigned, eligibleEntities); err != nil {
+	if err := stakeState.AddRewards(ctx, time, &params.RewardFactorEpochSigned, eligibleEntitiesAcctIDs); err != nil {
 		return fmt.Errorf("adding rewards: %w", err)
 	}
 

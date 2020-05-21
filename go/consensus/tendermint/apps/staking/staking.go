@@ -178,7 +178,7 @@ func (app *stakingApplication) onEpochChange(ctx *api.Context, epoch epochtime.E
 		// NOTE: Could be the same account, so make sure to not have two duplicate
 		//       copies of it and overwrite it later.
 		var escrow *staking.Account
-		if e.DelegatorID.Equal(e.EscrowID) {
+		if e.DelegatorID.Equal(&e.EscrowID) {
 			escrow = delegator
 		} else {
 			escrow, err = state.Account(ctx, e.EscrowID)
@@ -219,7 +219,7 @@ func (app *stakingApplication) onEpochChange(ctx *api.Context, epoch epochtime.E
 		if err = state.SetAccount(ctx, e.DelegatorID, delegator); err != nil {
 			return fmt.Errorf("failed to set delegator (%s) account: %w", e.DelegatorID, err)
 		}
-		if !e.DelegatorID.Equal(e.EscrowID) {
+		if !e.DelegatorID.Equal(&e.EscrowID) {
 			if err = state.SetAccount(ctx, e.EscrowID, escrow); err != nil {
 				return fmt.Errorf("failed to set escrow (%s) account: %w", e.EscrowID, err)
 			}

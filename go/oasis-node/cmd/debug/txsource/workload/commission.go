@@ -136,7 +136,7 @@ func (c *commission) doAmendCommissionSchedule(ctx context.Context, rng *rand.Ra
 	var account *staking.Account
 	account, err = stakingClient.AccountInfo(ctx, &staking.OwnerQuery{
 		Height: consensus.HeightLatest,
-		Owner:  c.account.Public(),
+		Owner:  staking.NewIDFromPublicKey(c.account.Public()),
 	})
 	if err != nil {
 		return fmt.Errorf("stakingClient.AccountInfo %s: %w", c.account.Public(), err)
@@ -331,7 +331,8 @@ func (c *commission) doAmendCommissionSchedule(ctx context.Context, rng *rand.Ra
 
 	// Fund account to cover AmendCommissionSchedule transaction fees.
 	fundAmount := int64(gas) * gasPrice // transaction costs
-	if err = transferFunds(ctx, c.logger, cnsc, c.fundingAccount, c.account.Public(), fundAmount); err != nil {
+	destAcct := staking.NewIDFromPublicKey(c.account.Public())
+	if err = transferFunds(ctx, c.logger, cnsc, c.fundingAccount, destAcct, fundAmount); err != nil {
 		return fmt.Errorf("account funding failure: %w", err)
 	}
 

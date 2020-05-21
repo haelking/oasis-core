@@ -11,7 +11,6 @@ import (
 	flag "github.com/spf13/pflag"
 	"google.golang.org/grpc"
 
-	"github.com/oasislabs/oasis-core/go/common/crypto/signature"
 	"github.com/oasislabs/oasis-core/go/common/errors"
 	"github.com/oasislabs/oasis-core/go/common/logging"
 	"github.com/oasislabs/oasis-core/go/common/quantity"
@@ -172,7 +171,7 @@ func doList(cmd *cobra.Command, args []string) {
 
 	ctx := context.Background()
 
-	var ids []signature.PublicKey
+	var ids []api.ID
 	doWithRetries(cmd, "query accounts", func() error {
 		var err error
 		ids, err = client.Accounts(ctx, consensus.HeightLatest)
@@ -180,7 +179,7 @@ func doList(cmd *cobra.Command, args []string) {
 	})
 
 	if cmdFlags.Verbose() {
-		accts := make(map[signature.PublicKey]*api.Account)
+		accts := make(map[api.ID]*api.Account)
 		for _, v := range ids {
 			accts[v] = getAccountInfo(ctx, cmd, v, client)
 		}
@@ -193,7 +192,7 @@ func doList(cmd *cobra.Command, args []string) {
 	}
 }
 
-func getAccountInfo(ctx context.Context, cmd *cobra.Command, id signature.PublicKey, client api.Backend) *api.Account {
+func getAccountInfo(ctx context.Context, cmd *cobra.Command, id api.ID, client api.Backend) *api.Account {
 	var acct *api.Account
 	doWithRetries(cmd, "query account "+id.String(), func() error {
 		var err error

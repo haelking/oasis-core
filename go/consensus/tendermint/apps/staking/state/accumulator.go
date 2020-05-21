@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/oasislabs/oasis-core/go/common/crypto/signature"
 	"github.com/oasislabs/oasis-core/go/common/quantity"
 	abciAPI "github.com/oasislabs/oasis-core/go/consensus/tendermint/api"
 	staking "github.com/oasislabs/oasis-core/go/staking/api"
@@ -18,15 +17,15 @@ type StakeAccumulatorCache struct {
 	state *MutableState
 
 	// accounts is a map of staking accounts that we are changing.
-	accounts map[signature.PublicKey]*staking.Account
+	accounts map[staking.ID]*staking.Account
 
 	// thresholds is a cache of the threshold map.
 	thresholds map[staking.ThresholdKind]quantity.Quantity
 }
 
-func (c *StakeAccumulatorCache) getAccount(id signature.PublicKey) (*staking.Account, error) {
+func (c *StakeAccumulatorCache) getAccount(id staking.ID) (*staking.Account, error) {
 	if c.accounts == nil {
-		c.accounts = make(map[signature.PublicKey]*staking.Account)
+		c.accounts = make(map[staking.ID]*staking.Account)
 	}
 
 	if a := c.accounts[id]; a != nil {
@@ -42,7 +41,7 @@ func (c *StakeAccumulatorCache) getAccount(id signature.PublicKey) (*staking.Acc
 }
 
 // CheckStakeClaims checks whether the escrow account balance satisfies all the stake claims.
-func (c *StakeAccumulatorCache) CheckStakeClaims(id signature.PublicKey) error {
+func (c *StakeAccumulatorCache) CheckStakeClaims(id staking.ID) error {
 	acct, err := c.getAccount(id)
 	if err != nil {
 		return err
@@ -54,7 +53,7 @@ func (c *StakeAccumulatorCache) CheckStakeClaims(id signature.PublicKey) error {
 //
 // In case there is insufficient stake to cover the claim or an error occurrs, no modifications are
 // made to the stake accumulator.
-func (c *StakeAccumulatorCache) AddStakeClaim(id signature.PublicKey, claim staking.StakeClaim, thresholds []staking.ThresholdKind) error {
+func (c *StakeAccumulatorCache) AddStakeClaim(id staking.ID, claim staking.StakeClaim, thresholds []staking.ThresholdKind) error {
 	acct, err := c.getAccount(id)
 	if err != nil {
 		return err
@@ -65,7 +64,7 @@ func (c *StakeAccumulatorCache) AddStakeClaim(id signature.PublicKey, claim stak
 // RemoveStakeClaim removes a given stake claim.
 //
 // It is an error if the stake claim does not exist.
-func (c *StakeAccumulatorCache) RemoveStakeClaim(id signature.PublicKey, claim staking.StakeClaim) error {
+func (c *StakeAccumulatorCache) RemoveStakeClaim(id staking.ID, claim staking.StakeClaim) error {
 	acct, err := c.getAccount(id)
 	if err != nil {
 		return err
@@ -74,7 +73,7 @@ func (c *StakeAccumulatorCache) RemoveStakeClaim(id signature.PublicKey, claim s
 }
 
 // GetEscrowBalance returns a given account's escrow balance.
-func (c *StakeAccumulatorCache) GetEscrowBalance(id signature.PublicKey) (*quantity.Quantity, error) {
+func (c *StakeAccumulatorCache) GetEscrowBalance(id staking.ID) (*quantity.Quantity, error) {
 	acct, err := c.getAccount(id)
 	if err != nil {
 		return nil, err
@@ -118,7 +117,7 @@ func NewStakeAccumulatorCache(ctx *abciAPI.Context) (*StakeAccumulatorCache, err
 //
 // In case there is no errors, the added claim is automatically committed. The caller must ensure
 // that this does not overwrite any outstanding account updates.
-func AddStakeClaim(ctx *abciAPI.Context, id signature.PublicKey, claim staking.StakeClaim, thresholds []staking.ThresholdKind) error {
+func AddStakeClaim(ctx *abciAPI.Context, id staking.ID, claim staking.StakeClaim, thresholds []staking.ThresholdKind) error {
 	sa, err := NewStakeAccumulatorCache(ctx)
 	if err != nil {
 		return err
@@ -133,7 +132,7 @@ func AddStakeClaim(ctx *abciAPI.Context, id signature.PublicKey, claim staking.S
 //
 // In case there is no errors, the removed claim is automatically committed. The caller must ensure
 // that this does not overwrite any outstanding account updates.
-func RemoveStakeClaim(ctx *abciAPI.Context, id signature.PublicKey, claim staking.StakeClaim) error {
+func RemoveStakeClaim(ctx *abciAPI.Context, id staking.ID, claim staking.StakeClaim) error {
 	sa, err := NewStakeAccumulatorCache(ctx)
 	if err != nil {
 		return err
@@ -145,7 +144,7 @@ func RemoveStakeClaim(ctx *abciAPI.Context, id signature.PublicKey, claim stakin
 }
 
 // CheckStakeClaims is a convenience function for checking a single entity's stake claims.
-func CheckStakeClaims(ctx *abciAPI.Context, id signature.PublicKey) error {
+func CheckStakeClaims(ctx *abciAPI.Context, id staking.ID) error {
 	sa, err := NewStakeAccumulatorCache(ctx)
 	if err != nil {
 		return err

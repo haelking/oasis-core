@@ -64,21 +64,22 @@ func (app *stakingApplication) disburseFeesP(
 	// Pay the proposer.
 	feeProposerAmt := totalFees.Clone()
 	if proposerEntity != nil {
-		acct, err := stakeState.Account(ctx, *proposerEntity)
+		proposerAcctID := staking.NewIDFromPublicKey(*proposerEntity)
+		proposerAcct, err := stakeState.Account(ctx, proposerAcctID)
 		if err != nil {
 			return fmt.Errorf("failed to fetch proposer account: %w", err)
 		}
-		if err = quantity.Move(&acct.General.Balance, totalFees, feeProposerAmt); err != nil {
+		if err = quantity.Move(&proposerAcct.General.Balance, totalFees, feeProposerAmt); err != nil {
 			return fmt.Errorf("move feeProposerAmt: %w", err)
 		}
-		if err = stakeState.SetAccount(ctx, *proposerEntity, acct); err != nil {
+		if err = stakeState.SetAccount(ctx, proposerAcctID, proposerAcct); err != nil {
 			return fmt.Errorf("failed to set account: %w", err)
 		}
 
 		// Emit transfer event.
 		evt := &staking.TransferEvent{
 			From:   staking.FeeAccumulatorAccountID,
-			To:     *proposerEntity,
+			To:     proposerAcctID,
 			Tokens: *feeProposerAmt,
 		}
 		ctx.EmitEvent(abciAPI.NewEventBuilder(app.Name()).Attribute(KeyTransfer, cbor.Marshal(evt)))
@@ -178,24 +179,23 @@ func (app *stakingApplication) disburseFeesVQ(
 	}
 
 	// Pay the next proposer.
-	if !nextProposerTotal.IsZero() {
-		if proposerEntity != nil {
-			acct, err := stakeState.Account(ctx, *proposerEntity)
-			if err != nil {
-				return fmt.Errorf("failed to fetch next proposer account: %w", err)
-			}
-			if err = quantity.Move(&acct.General.Balance, lastBlockFees, nextProposerTotal); err != nil {
-				return fmt.Errorf("move nextProposerTotal: %w", err)
-			}
-			if err = stakeState.SetAccount(ctx, *proposerEntity, acct); err != nil {
-				return fmt.Errorf("failed to set next proposer account: %w", err)
-			}
+	if !nextProposerTotal.IsZero() && proposerEntity != nil {
+		proposerAcctID := staking.NewIDFromPublicKey(*proposerEntity)
+		proposerAcct, err := stakeState.Account(ctx, proposerAcctID)
+		if err != nil {
+			return fmt.Errorf("failed to fetch next proposer account: %w", err)
+		}
+		if err = quantity.Move(&proposerAcct.General.Balance, lastBlockFees, nextProposerTotal); err != nil {
+			return fmt.Errorf("move nextProposerTotal: %w", err)
+		}
+		if err = stakeState.SetAccount(ctx, proposerAcctID, proposerAcct); err != nil {
+			return fmt.Errorf("failed to set next proposer account: %w", err)
 		}
 
 		// Emit transfer event.
 		evt := &staking.TransferEvent{
 			From:   staking.FeeAccumulatorAccountID,
-			To:     *proposerEntity,
+			To:     proposerAcctID,
 			Tokens: *nextProposerTotal,
 		}
 		ctx.EmitEvent(abciAPI.NewEventBuilder(app.Name()).Attribute(KeyTransfer, cbor.Marshal(evt)))
@@ -204,21 +204,22 @@ func (app *stakingApplication) disburseFeesVQ(
 	// Pay the voters.
 	if !shareVote.IsZero() {
 		for _, voterEntity := range votingEntities {
-			acct, err := stakeState.Account(ctx, voterEntity)
+			voterAcctID := staking.NewIDFromPublicKey(voterEntity)
+			voterAcct, err := stakeState.Account(ctx, voterAcctID)
 			if err != nil {
-				return fmt.Errorf("failed to fetch voter %s account: %w", voterEntity, err)
+				return fmt.Errorf("failed to fetch voter %s account: %w", voterAcctID, err)
 			}
-			if err = quantity.Move(&acct.General.Balance, lastBlockFees, shareVote); err != nil {
+			if err = quantity.Move(&voterAcct.General.Balance, lastBlockFees, shareVote); err != nil {
 				return fmt.Errorf("move shareVote: %w", err)
 			}
-			if err = stakeState.SetAccount(ctx, voterEntity, acct); err != nil {
-				return fmt.Errorf("failed to set voter %s account: %w", voterEntity, err)
+			if err = stakeState.SetAccount(ctx, voterAcctID, voterAcct); err != nil {
+				return fmt.Errorf("failed to set voter %s account: %w", voterAcctID, err)
 			}
 
 			// Emit transfer event.
 			evt := &staking.TransferEvent{
 				From:   staking.FeeAccumulatorAccountID,
-				To:     voterEntity,
+				To:     voterAcctID,
 				Tokens: *shareVote,
 			}
 			ctx.EmitEvent(abciAPI.NewEventBuilder(app.Name()).Attribute(KeyTransfer, cbor.Marshal(evt)))

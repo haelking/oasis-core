@@ -11,11 +11,11 @@ import (
 	flag "github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
-	"github.com/oasislabs/oasis-core/go/common/crypto/signature"
 	cmdCommon "github.com/oasislabs/oasis-core/go/oasis-node/cmd/common"
 	cmdConsensus "github.com/oasislabs/oasis-core/go/oasis-node/cmd/common/consensus"
 	cmdFlags "github.com/oasislabs/oasis-core/go/oasis-node/cmd/common/flags"
 	cmdGrpc "github.com/oasislabs/oasis-core/go/oasis-node/cmd/common/grpc"
+	"github.com/oasislabs/oasis-core/go/staking/api"
 	staking "github.com/oasislabs/oasis-core/go/staking/api"
 )
 
@@ -97,7 +97,7 @@ func doAccountInfo(cmd *cobra.Command, args []string) {
 		cmdCommon.EarlyLogAndExit(err)
 	}
 
-	var id signature.PublicKey
+	var id api.ID
 	if err := id.UnmarshalText([]byte(viper.GetString(CfgAccountID))); err != nil {
 		logger.Error("failed to parse account ID",
 			"err", err,

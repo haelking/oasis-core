@@ -3,7 +3,6 @@ package staking
 import (
 	"context"
 
-	"github.com/oasislabs/oasis-core/go/common/crypto/signature"
 	"github.com/oasislabs/oasis-core/go/common/quantity"
 	stakingState "github.com/oasislabs/oasis-core/go/consensus/tendermint/apps/staking/state"
 	epochtime "github.com/oasislabs/oasis-core/go/epochtime/api"
@@ -17,10 +16,10 @@ type Query interface {
 	LastBlockFees(context.Context) (*quantity.Quantity, error)
 	Threshold(context.Context, staking.ThresholdKind) (*quantity.Quantity, error)
 	DebondingInterval(context.Context) (epochtime.EpochTime, error)
-	Accounts(context.Context) ([]signature.PublicKey, error)
-	AccountInfo(context.Context, signature.PublicKey) (*staking.Account, error)
-	Delegations(context.Context, signature.PublicKey) (map[signature.PublicKey]*staking.Delegation, error)
-	DebondingDelegations(context.Context, signature.PublicKey) (map[signature.PublicKey][]*staking.DebondingDelegation, error)
+	Accounts(context.Context) ([]staking.ID, error)
+	AccountInfo(context.Context, staking.ID) (*staking.Account, error)
+	Delegations(context.Context, staking.ID) (map[staking.ID]*staking.Delegation, error)
+	DebondingDelegations(context.Context, staking.ID) (map[staking.ID][]*staking.DebondingDelegation, error)
 	Genesis(context.Context) (*staking.Genesis, error)
 	ConsensusParameters(context.Context) (*staking.ConsensusParameters, error)
 }
@@ -72,19 +71,19 @@ func (sq *stakingQuerier) DebondingInterval(ctx context.Context) (epochtime.Epoc
 	return sq.state.DebondingInterval(ctx)
 }
 
-func (sq *stakingQuerier) Accounts(ctx context.Context) ([]signature.PublicKey, error) {
+func (sq *stakingQuerier) Accounts(ctx context.Context) ([]staking.ID, error) {
 	return sq.state.Accounts(ctx)
 }
 
-func (sq *stakingQuerier) AccountInfo(ctx context.Context, id signature.PublicKey) (*staking.Account, error) {
+func (sq *stakingQuerier) AccountInfo(ctx context.Context, id staking.ID) (*staking.Account, error) {
 	return sq.state.Account(ctx, id)
 }
 
-func (sq *stakingQuerier) Delegations(ctx context.Context, id signature.PublicKey) (map[signature.PublicKey]*staking.Delegation, error) {
+func (sq *stakingQuerier) Delegations(ctx context.Context, id staking.ID) (map[staking.ID]*staking.Delegation, error) {
 	return sq.state.DelegationsFor(ctx, id)
 }
 
-func (sq *stakingQuerier) DebondingDelegations(ctx context.Context, id signature.PublicKey) (map[signature.PublicKey][]*staking.DebondingDelegation, error) {
+func (sq *stakingQuerier) DebondingDelegations(ctx context.Context, id staking.ID) (map[staking.ID][]*staking.DebondingDelegation, error) {
 	return sq.state.DebondingDelegationsFor(ctx, id)
 }
 

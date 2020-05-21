@@ -4,7 +4,6 @@ package api
 import (
 	"fmt"
 
-	"github.com/oasislabs/oasis-core/go/common/crypto/signature"
 	"github.com/oasislabs/oasis-core/go/common/quantity"
 	epochtime "github.com/oasislabs/oasis-core/go/epochtime/api"
 )
@@ -41,7 +40,7 @@ func (p *ConsensusParameters) SanityCheck() error {
 
 // SanityCheckAccount examines an account's balances.
 // Adds the balances to a running total `total`.
-func SanityCheckAccount(total *quantity.Quantity, parameters *ConsensusParameters, now epochtime.EpochTime, id signature.PublicKey, acct *Account) error {
+func SanityCheckAccount(total *quantity.Quantity, parameters *ConsensusParameters, now epochtime.EpochTime, id ID, acct *Account) error {
 	if !acct.General.Balance.IsValid() {
 		return fmt.Errorf("staking: sanity check failed: general balance is invalid for account with ID: %s", id)
 	}
@@ -65,7 +64,7 @@ func SanityCheckAccount(total *quantity.Quantity, parameters *ConsensusParameter
 }
 
 // SanityCheckDelegations examines an account's delegations.
-func SanityCheckDelegations(id signature.PublicKey, account *Account, delegations map[signature.PublicKey]*Delegation) error {
+func SanityCheckDelegations(id ID, account *Account, delegations map[ID]*Delegation) error {
 	var shares quantity.Quantity
 	var numDelegations uint64
 	for _, d := range delegations {
@@ -90,7 +89,7 @@ func SanityCheckDelegations(id signature.PublicKey, account *Account, delegation
 }
 
 // SanityCheckDebondingDelegations examines an account's debonding delegations.
-func SanityCheckDebondingDelegations(id signature.PublicKey, account *Account, delegations map[signature.PublicKey][]*DebondingDelegation) error {
+func SanityCheckDebondingDelegations(id ID, account *Account, delegations map[ID][]*DebondingDelegation) error {
 	var shares quantity.Quantity
 	var numDebondingDelegations uint64
 	for _, dels := range delegations {
@@ -116,7 +115,7 @@ func SanityCheckDebondingDelegations(id signature.PublicKey, account *Account, d
 }
 
 // SanityCheckAccountShares examines an account's share pools.
-func SanityCheckAccountShares(id signature.PublicKey, acct *Account, delegations map[signature.PublicKey]*Delegation, debondingDelegations map[signature.PublicKey][]*DebondingDelegation) error {
+func SanityCheckAccountShares(id ID, acct *Account, delegations map[ID]*Delegation, debondingDelegations map[ID][]*DebondingDelegation) error {
 	// Count the delegations for this account and add up the total shares.
 	var shares quantity.Quantity
 	var numDelegations uint64

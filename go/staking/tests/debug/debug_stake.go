@@ -41,7 +41,7 @@ var (
 			// Zero RewardFactorBlockProposed is normal.
 		},
 		TotalSupply: DebugStateTotalSupply,
-		Ledger: map[signature.PublicKey]*api.Account{
+		Ledger: map[api.ID]*api.Account{
 			DebugStateSrcID: &api.Account{
 				General: api.GeneralAccount{
 					Balance: DebugStateSrcGeneralBalance,
@@ -54,8 +54,8 @@ var (
 				},
 			},
 		},
-		Delegations: map[signature.PublicKey]map[signature.PublicKey]*api.Delegation{
-			DebugStateSrcID: map[signature.PublicKey]*api.Delegation{
+		Delegations: map[api.ID]map[api.ID]*api.Delegation{
+			DebugStateSrcID: map[api.ID]*api.Delegation{
 				DebugStateSrcID: &api.Delegation{
 					Shares: DebugStateSrcEscrowActiveShares,
 				},
@@ -64,9 +64,9 @@ var (
 	}
 
 	DebugStateSrcSigner = mustGenerateSigner()
-	DebugStateSrcID     = DebugStateSrcSigner.Public()
+	DebugStateSrcID     = api.NewIDFromPublicKey(DebugStateSrcSigner.Public())
 	destSigner          = mustGenerateSigner()
-	DebugStateDestID    = destSigner.Public()
+	DebugStateDestID    = api.NewIDFromPublicKey(destSigner.Public())
 )
 
 func QtyFromInt(n int) quantity.Quantity {

@@ -35,7 +35,7 @@ var (
 	// accountKeyFmt is the key format used for accounts (account id).
 	//
 	// Value is a CBOR-serialized account.
-	accountKeyFmt = keyformat.New(0x50, &signature.PublicKey{})
+	accountKeyFmt = keyformat.New(0x50, &staking.ID{})
 	// totalSupplyKeyFmt is the key format used for the total supply.
 	//
 	// Value is a CBOR-serialized quantity.
@@ -47,17 +47,17 @@ var (
 	// delegationKeyFmt is the key format used for delegations (escrow id, delegator id).
 	//
 	// Value is CBOR-serialized delegation.
-	delegationKeyFmt = keyformat.New(0x53, &signature.PublicKey{}, &signature.PublicKey{})
+	delegationKeyFmt = keyformat.New(0x53, &staking.ID{}, &staking.ID{})
 	// debondingDelegationKeyFmt is the key format used for debonding delegations
 	// (delegator id, escrow id, seq no).
 	//
 	// Value is CBOR-serialized debonding delegation.
-	debondingDelegationKeyFmt = keyformat.New(0x54, &signature.PublicKey{}, &signature.PublicKey{}, uint64(0))
+	debondingDelegationKeyFmt = keyformat.New(0x54, &staking.ID{}, &staking.ID{}, uint64(0))
 	// debondingQueueKeyFmt is the debonding queue key format (epoch, delegator id,
 	// escrow id, seq no).
 	//
 	// Value is empty.
-	debondingQueueKeyFmt = keyformat.New(0x55, uint64(0), &signature.PublicKey{}, &signature.PublicKey{}, uint64(0))
+	debondingQueueKeyFmt = keyformat.New(0x55, uint64(0), &staking.ID{}, &staking.ID{}, uint64(0))
 	// parametersKeyFmt is the key format used for consensus parameters.
 	//
 	// Value is CBOR-serialized staking.ConsensusParameters.
@@ -165,13 +165,13 @@ func (s *ImmutableState) Thresholds(ctx context.Context) (map[staking.ThresholdK
 	return params.Thresholds, nil
 }
 
-func (s *ImmutableState) Accounts(ctx context.Context) ([]signature.PublicKey, error) {
+func (s *ImmutableState) Accounts(ctx context.Context) ([]staking.ID, error) {
 	it := s.is.NewIterator(ctx)
 	defer it.Close()
 
-	var accounts []signature.PublicKey
+	var accounts []staking.ID
 	for it.Seek(accountKeyFmt.Encode()); it.Valid(); it.Next() {
-		var id signature.PublicKey
+		var id staking.ID
 		if !accountKeyFmt.Decode(it.Key(), &id) {
 			break
 		}
@@ -184,7 +184,7 @@ func (s *ImmutableState) Accounts(ctx context.Context) ([]signature.PublicKey, e
 	return accounts, nil
 }
 
-func (s *ImmutableState) Account(ctx context.Context, id signature.PublicKey) (*staking.Account, error) {
+func (s *ImmutableState) Account(ctx context.Context, id staking.ID) (*staking.Account, error) {
 	value, err := s.is.Get(ctx, accountKeyFmt.Encode(&id))
 	if err != nil {
 		return nil, abciAPI.UnavailableStateError(err)
@@ -201,7 +201,7 @@ func (s *ImmutableState) Account(ctx context.Context, id signature.PublicKey) (*
 }
 
 // EscrowBalance returns the escrow balance for the ID.
-func (s *ImmutableState) EscrowBalance(ctx context.Context, id signature.PublicKey) (*quantity.Quantity, error) {
+func (s *ImmutableState) EscrowBalance(ctx context.Context, id staking.ID) (*quantity.Quantity, error) {
 	account, err := s.Account(ctx, id)
 	if err != nil {
 		return nil, err
@@ -209,14 +209,16 @@ func (s *ImmutableState) EscrowBalance(ctx context.Context, id signature.PublicK
 	return &account.Escrow.Active.Balance, nil
 }
 
-func (s *ImmutableState) Delegations(ctx context.Context) (map[signature.PublicKey]map[signature.PublicKey]*staking.Delegation, error) {
+func (s *ImmutableState) Delegations(
+	ctx context.Context,
+) (map[staking.ID]map[staking.ID]*staking.Delegation, error) {
 	it := s.is.NewIterator(ctx)
 	defer it.Close()
 
-	delegations := make(map[signature.PublicKey]map[signature.PublicKey]*staking.Delegation)
+	delegations := make(map[staking.ID]map[staking.ID]*staking.Delegation)
 	for it.Seek(delegationKeyFmt.Encode()); it.Valid(); it.Next() {
-		var escrowID signature.PublicKey
-		var delegatorID signature.PublicKey
+		var escrowID staking.ID
+		var delegatorID staking.ID
 		if !delegationKeyFmt.Decode(it.Key(), &escrowID, &delegatorID) {
 			break
 		}
@@ -227,7 +229,7 @@ func (s *ImmutableState) Delegations(ctx context.Context) (map[signature.PublicK
 		}
 
 		if delegations[escrowID] == nil {
-			delegations[escrowID] = make(map[signature.PublicKey]*staking.Delegation)
+			delegations[escrowID] = make(map[staking.ID]*staking.Delegation)
 		}
 		delegations[escrowID][delegatorID] = &del
 	}
@@ -237,7 +239,10 @@ func (s *ImmutableState) Delegations(ctx context.Context) (map[signature.PublicK
 	return delegations, nil
 }
 
-func (s *ImmutableState) Delegation(ctx context.Context, delegatorID, escrowID signature.PublicKey) (*staking.Delegation, error) {
+func (s *ImmutableState) Delegation(
+	ctx context.Context,
+	delegatorID, escrowID staking.ID,
+) (*staking.Delegation, error) {
 	value, err := s.is.Get(ctx, delegationKeyFmt.Encode(&escrowID, &delegatorID))
 	if err != nil {
 		return nil, abciAPI.UnavailableStateError(err)
@@ -253,18 +258,21 @@ func (s *ImmutableState) Delegation(ctx context.Context, delegatorID, escrowID s
 	return &del, nil
 }
 
-func (s *ImmutableState) DelegationsFor(ctx context.Context, delegatorID signature.PublicKey) (map[signature.PublicKey]*staking.Delegation, error) {
+func (s *ImmutableState) DelegationsFor(
+	ctx context.Context,
+	delegatorID staking.ID,
+) (map[staking.ID]*staking.Delegation, error) {
 	it := s.is.NewIterator(ctx)
 	defer it.Close()
 
-	delegations := make(map[signature.PublicKey]*staking.Delegation)
+	delegations := make(map[staking.ID]*staking.Delegation)
 	for it.Seek(delegationKeyFmt.Encode()); it.Valid(); it.Next() {
-		var escrowID signature.PublicKey
-		var decDelegatorID signature.PublicKey
+		var escrowID staking.ID
+		var decDelegatorID staking.ID
 		if !delegationKeyFmt.Decode(it.Key(), &escrowID, &decDelegatorID) {
 			break
 		}
-		if !decDelegatorID.Equal(delegatorID) {
+		if !decDelegatorID.Equal(&delegatorID) {
 			continue
 		}
 
@@ -283,14 +291,14 @@ func (s *ImmutableState) DelegationsFor(ctx context.Context, delegatorID signatu
 
 func (s *ImmutableState) DebondingDelegations(
 	ctx context.Context,
-) (map[signature.PublicKey]map[signature.PublicKey][]*staking.DebondingDelegation, error) {
+) (map[staking.ID]map[staking.ID][]*staking.DebondingDelegation, error) {
 	it := s.is.NewIterator(ctx)
 	defer it.Close()
 
-	delegations := make(map[signature.PublicKey]map[signature.PublicKey][]*staking.DebondingDelegation)
+	delegations := make(map[staking.ID]map[staking.ID][]*staking.DebondingDelegation)
 	for it.Seek(debondingDelegationKeyFmt.Encode()); it.Valid(); it.Next() {
-		var escrowID signature.PublicKey
-		var delegatorID signature.PublicKey
+		var escrowID staking.ID
+		var delegatorID staking.ID
 		if !debondingDelegationKeyFmt.Decode(it.Key(), &delegatorID, &escrowID) {
 			break
 		}
@@ -301,7 +309,7 @@ func (s *ImmutableState) DebondingDelegations(
 		}
 
 		if delegations[escrowID] == nil {
-			delegations[escrowID] = make(map[signature.PublicKey][]*staking.DebondingDelegation)
+			delegations[escrowID] = make(map[staking.ID][]*staking.DebondingDelegation)
 		}
 		delegations[escrowID][delegatorID] = append(delegations[escrowID][delegatorID], &deb)
 	}
@@ -313,19 +321,19 @@ func (s *ImmutableState) DebondingDelegations(
 
 func (s *ImmutableState) DebondingDelegationsFor(
 	ctx context.Context,
-	delegatorID signature.PublicKey,
-) (map[signature.PublicKey][]*staking.DebondingDelegation, error) {
+	delegatorID staking.ID,
+) (map[staking.ID][]*staking.DebondingDelegation, error) {
 	it := s.is.NewIterator(ctx)
 	defer it.Close()
 
-	delegations := make(map[signature.PublicKey][]*staking.DebondingDelegation)
+	delegations := make(map[staking.ID][]*staking.DebondingDelegation)
 	for it.Seek(debondingDelegationKeyFmt.Encode(&delegatorID)); it.Valid(); it.Next() {
-		var escrowID signature.PublicKey
-		var decDelegatorID signature.PublicKey
+		var escrowID staking.ID
+		var decDelegatorID staking.ID
 		if !debondingDelegationKeyFmt.Decode(it.Key(), &decDelegatorID, &escrowID) {
 			break
 		}
-		if !decDelegatorID.Equal(delegatorID) {
+		if !decDelegatorID.Equal(&delegatorID) {
 			continue
 		}
 
@@ -344,7 +352,7 @@ func (s *ImmutableState) DebondingDelegationsFor(
 
 func (s *ImmutableState) DebondingDelegation(
 	ctx context.Context,
-	delegatorID, escrowID signature.PublicKey,
+	delegatorID, escrowID staking.ID,
 	seq uint64,
 ) (*staking.DebondingDelegation, error) {
 	value, err := s.is.Get(ctx, debondingDelegationKeyFmt.Encode(&delegatorID, &escrowID, seq))
@@ -364,8 +372,8 @@ func (s *ImmutableState) DebondingDelegation(
 
 type DebondingQueueEntry struct {
 	Epoch       epochtime.EpochTime
-	DelegatorID signature.PublicKey
-	EscrowID    signature.PublicKey
+	DelegatorID staking.ID
+	EscrowID    staking.ID
 	Seq         uint64
 	Delegation  *staking.DebondingDelegation
 }
@@ -377,8 +385,8 @@ func (s *ImmutableState) ExpiredDebondingQueue(ctx context.Context, epoch epocht
 	var entries []*DebondingQueueEntry
 	for it.Seek(debondingQueueKeyFmt.Encode()); it.Valid(); it.Next() {
 		var decEpoch, seq uint64
-		var escrowID signature.PublicKey
-		var delegatorID signature.PublicKey
+		var escrowID staking.ID
+		var delegatorID staking.ID
 		if !debondingQueueKeyFmt.Decode(it.Key(), &decEpoch, &delegatorID, &escrowID, &seq) || decEpoch > uint64(epoch) {
 			break
 		}
@@ -505,7 +513,7 @@ type MutableState struct {
 	ms mkvs.KeyValueTree
 }
 
-func (s *MutableState) SetAccount(ctx context.Context, id signature.PublicKey, account *staking.Account) error {
+func (s *MutableState) SetAccount(ctx context.Context, id staking.ID, account *staking.Account) error {
 	err := s.ms.Insert(ctx, accountKeyFmt.Encode(&id), cbor.Marshal(account))
 	return abciAPI.UnavailableStateError(err)
 }
@@ -525,7 +533,7 @@ func (s *MutableState) SetConsensusParameters(ctx context.Context, params *staki
 	return abciAPI.UnavailableStateError(err)
 }
 
-func (s *MutableState) SetDelegation(ctx context.Context, delegatorID, escrowID signature.PublicKey, d *staking.Delegation) error {
+func (s *MutableState) SetDelegation(ctx context.Context, delegatorID, escrowID staking.ID, d *staking.Delegation) error {
 	// Remove delegation if there are no more shares in it.
 	if d.Shares.IsZero() {
 		err := s.ms.Remove(ctx, delegationKeyFmt.Encode(&escrowID, &delegatorID))
@@ -538,7 +546,7 @@ func (s *MutableState) SetDelegation(ctx context.Context, delegatorID, escrowID 
 
 func (s *MutableState) SetDebondingDelegation(
 	ctx context.Context,
-	delegatorID, escrowID signature.PublicKey,
+	delegatorID, escrowID staking.ID,
 	seq uint64,
 	d *staking.DebondingDelegation,
 ) error {
@@ -564,7 +572,7 @@ func (s *MutableState) SetDebondingDelegation(
 func (s *MutableState) RemoveFromDebondingQueue(
 	ctx context.Context,
 	epoch epochtime.EpochTime,
-	delegatorID, escrowID signature.PublicKey,
+	delegatorID, escrowID staking.ID,
 	seq uint64,
 ) error {
 	err := s.ms.Remove(ctx, debondingQueueKeyFmt.Encode(uint64(epoch), &delegatorID, &escrowID, seq))
@@ -609,7 +617,7 @@ func slashPool(dst *quantity.Quantity, p *staking.SharePool, amount, total *quan
 //
 // WARNING: This is an internal routine to be used to implement staking policy,
 // and MUST NOT be exposed outside of backend implementations.
-func (s *MutableState) SlashEscrow(ctx *abciAPI.Context, fromID signature.PublicKey, amount *quantity.Quantity) (bool, error) {
+func (s *MutableState) SlashEscrow(ctx *abciAPI.Context, fromID staking.ID, amount *quantity.Quantity) (bool, error) {
 	commonPool, err := s.CommonPool(ctx)
 	if err != nil {
 		return false, fmt.Errorf("tendermint/staking: failed to query common pool for slash: %w", err)
@@ -669,7 +677,7 @@ func (s *MutableState) SlashEscrow(ctx *abciAPI.Context, fromID signature.Public
 //
 // WARNING: This is an internal routine to be used to implement incentivization
 // policy, and MUST NOT be exposed outside of backend implementations.
-func (s *MutableState) TransferFromCommon(ctx *abciAPI.Context, toID signature.PublicKey, amount *quantity.Quantity) (bool, error) {
+func (s *MutableState) TransferFromCommon(ctx *abciAPI.Context, toID staking.ID, amount *quantity.Quantity) (bool, error) {
 	commonPool, err := s.CommonPool(ctx)
 	if err != nil {
 		return false, fmt.Errorf("tendermint/staking: failed to query common pool for transfer: %w", err)
@@ -716,7 +724,7 @@ func (s *MutableState) AddRewards(
 	ctx *abciAPI.Context,
 	time epochtime.EpochTime,
 	factor *quantity.Quantity,
-	accounts []signature.PublicKey,
+	accountIDs []staking.ID,
 ) error {
 	steps, err := s.RewardSchedule(ctx)
 	if err != nil {
@@ -739,7 +747,7 @@ func (s *MutableState) AddRewards(
 		return fmt.Errorf("tendermint/staking: loading common pool: %w", err)
 	}
 
-	for _, id := range accounts {
+	for _, id := range accountIDs {
 		var ent *staking.Account
 		ent, err = s.Account(ctx, id)
 		if err != nil {
@@ -825,7 +833,7 @@ func (s *MutableState) AddRewardSingleAttenuated(
 	time epochtime.EpochTime,
 	factor *quantity.Quantity,
 	attenuationNumerator, attenuationDenominator int,
-	account signature.PublicKey,
+	acctID staking.ID,
 ) error {
 	steps, err := s.RewardSchedule(ctx)
 	if err != nil {
@@ -856,9 +864,9 @@ func (s *MutableState) AddRewardSingleAttenuated(
 		return fmt.Errorf("tendermint/staking: failed loading common pool: %w", err)
 	}
 
-	ent, err := s.Account(ctx, account)
+	ent, err := s.Account(ctx, acctID)
 	if err != nil {
-		return fmt.Errorf("tendermint/staking: failed to query account %s: %w", account, err)
+		return fmt.Errorf("tendermint/staking: failed to query account %s: %w", acctID, err)
 	}
 
 	q := ent.Escrow.Active.Balance.Clone()
@@ -906,7 +914,7 @@ func (s *MutableState) AddRewardSingleAttenuated(
 		}
 		ev := cbor.Marshal(&staking.AddEscrowEvent{
 			Owner:  staking.CommonPoolAccountID,
-			Escrow: account,
+			Escrow: acctID,
 			Tokens: *q,
 		})
 		ctx.EmitEvent(api.NewEventBuilder(AppName).Attribute(KeyAddEscrow, ev))
@@ -914,7 +922,7 @@ func (s *MutableState) AddRewardSingleAttenuated(
 
 	if com != nil && !com.IsZero() {
 		var delegation *staking.Delegation
-		delegation, err = s.Delegation(ctx, account, account)
+		delegation, err = s.Delegation(ctx, acctID, acctID)
 		if err != nil {
 			return fmt.Errorf("tendermint/staking: failed to query delegation: %w", err)
 		}
@@ -923,12 +931,12 @@ func (s *MutableState) AddRewardSingleAttenuated(
 			return fmt.Errorf("tendermint/staking: failed depositing commission: %w", err)
 		}
 
-		if err = s.SetDelegation(ctx, account, account, delegation); err != nil {
+		if err = s.SetDelegation(ctx, acctID, acctID, delegation); err != nil {
 			return fmt.Errorf("tendermint/staking: failed to set delegation: %w", err)
 		}
 	}
 
-	if err = s.SetAccount(ctx, account, ent); err != nil {
+	if err = s.SetAccount(ctx, acctID, ent); err != nil {
 		return fmt.Errorf("tendermint/staking: failed to set account: %w", err)
 	}
 
