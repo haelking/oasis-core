@@ -400,11 +400,17 @@ impl Kdf {
 
         // Decrypt the persisted master secret.
         let d2 = Self::new_d2();
-        let plaintext = d2
-            .open(&nonce, ciphertext.to_vec(), runtime_id.as_ref().to_vec())
-            .expect("persisted state is corrupted");
-
-        Some(MasterSecret::from(plaintext))
+        match d2.open(&nonce, ciphertext.to_vec(), runtime_id.as_ref().to_vec()) {
+            Err(_) => {
+                // Try migrating old master secret.
+                let old_plaintext = d2
+                    .open(&nonce, ciphertext.to_vec(), vec![])
+                    .expect("old persisted state is corrupted");
+                Self::save_master_secret(&MasterSecret::from(old_plaintext.clone()), runtime_id);
+                Some(MasterSecret::from(old_plaintext))
+            }
+            Ok(plaintext) => Some(MasterSecret::from(plaintext)),
+        }
     }
 
     fn save_master_secret(master_secret: &MasterSecret, runtime_id: &RuntimeId) {
