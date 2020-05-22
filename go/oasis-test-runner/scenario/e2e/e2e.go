@@ -16,8 +16,8 @@ const (
 )
 
 var (
-	// E2eParamsDummy is a dummy instance of e2eImpl used to register e2e-wise parameters.
-	E2eParamsDummy *e2eImpl = &e2eImpl{name: "e2e"}
+	// E2eParamsDummy is a dummy instance of e2eImpl used to register e2e/* parameters.
+	E2eParamsDummy *e2eImpl = newE2eImpl("")
 
 	logger = logging.GetLogger("e2e/common")
 )
@@ -27,26 +27,37 @@ type e2eImpl struct {
 	net    *oasis.Network
 	name   string
 	logger *logging.Logger
-
-	// nodeBinary is the path to oasis-node executable.
-	nodeBinary string
+	flags  *flag.FlagSet
 }
 
 func newE2eImpl(name string) *e2eImpl {
-	return &e2eImpl{
-		name:       "e2e/" + name,
-		logger:     logging.GetLogger("scenario/e2e/" + name),
-		nodeBinary: "oasis-node",
+	// Empty scenario name is used for registering global parameters only.
+	fullName := "e2e"
+	if name != "" {
+		fullName += "/" + name
 	}
+
+	sc := &e2eImpl{
+		name:   fullName,
+		logger: logging.GetLogger("scenario/e2e/" + name),
+		flags:  flag.NewFlagSet(name, flag.ContinueOnError),
+	}
+
+	sc.flags.String(cfgNodeBinary, "oasis-node", "path to the node binary")
+
+	return sc
 }
 
 func (sc *e2eImpl) Clone() e2eImpl {
-	return e2eImpl{
-		net:        sc.net,
-		name:       sc.name,
-		logger:     sc.logger,
-		nodeBinary: sc.nodeBinary,
+	newSc := &e2eImpl{
+		net:    sc.net,
+		name:   sc.name,
+		logger: sc.logger,
+		flags:  flag.NewFlagSet(sc.name, flag.ContinueOnError),
 	}
+	newSc.flags.AddFlagSet(sc.flags)
+
+	return *newSc
 }
 
 func (sc *e2eImpl) Name() string {
@@ -54,10 +65,7 @@ func (sc *e2eImpl) Name() string {
 }
 
 func (sc *e2eImpl) Parameters() *flag.FlagSet {
-	fs := flag.NewFlagSet(sc.name, flag.ContinueOnError)
-	fs.StringVar(&sc.nodeBinary, cfgNodeBinary, sc.nodeBinary, "path to the node binary")
-
-	return fs
+	return sc.flags
 }
 
 func (sc *e2eImpl) Init(childEnv *env.Env, net *oasis.Network) error {

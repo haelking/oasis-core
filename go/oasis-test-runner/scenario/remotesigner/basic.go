@@ -39,11 +39,15 @@ func (sc *basicImpl) Clone() scenario.Scenario {
 func (sc *basicImpl) Run(childEnv *env.Env) error {
 	// Provision the server keys.
 	sc.logger.Info("provisioning the server keys")
-	if err := cli.RunSubCommand(
+	serverBinary, err := sc.flags.GetString(cfgServerBinary)
+	if err != nil {
+		return err
+	}
+	if err = cli.RunSubCommand(
 		childEnv,
 		sc.logger,
 		"init",
-		sc.serverBinary,
+		serverBinary,
 		[]string{
 			"--" + cmdCommon.CfgDataDir, childEnv.Dir(),
 			"init",
@@ -69,7 +73,7 @@ func (sc *basicImpl) Run(childEnv *env.Env) error {
 		childEnv,
 		sc.logger,
 		"init_client",
-		sc.serverBinary,
+		serverBinary,
 		[]string{
 			"--" + cmdCommon.CfgDataDir, childEnv.Dir(),
 			"init_client",
@@ -88,7 +92,7 @@ func (sc *basicImpl) Run(childEnv *env.Env) error {
 		childEnv,
 		sc.logger,
 		"server",
-		sc.serverBinary,
+		serverBinary,
 		[]string{
 			"--" + cmdCommon.CfgDataDir, childEnv.Dir(),
 			"--client.certificate", filepath.Join(childEnv.Dir(), "remote_signer_client_cert.pem"),

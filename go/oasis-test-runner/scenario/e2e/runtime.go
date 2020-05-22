@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	flag "github.com/spf13/pflag"
-
 	"github.com/oasislabs/oasis-core/go/common"
 	"github.com/oasislabs/oasis-core/go/common/cbor"
 	"github.com/oasislabs/oasis-core/go/common/node"
@@ -40,8 +38,8 @@ const (
 )
 
 var (
-	// RuntimeParamsDummy is a dummy instance of runtimeImpl used to register runtime-wise parameters.
-	RuntimeParamsDummy *runtimeImpl = &runtimeImpl{e2eImpl: *newE2eImpl("runtime")}
+	// RuntimeParamsDummy is a dummy instance of runtimeImpl used to register e2e/runtime/* parameters.
+	RuntimeParamsDummy *runtimeImpl = newRuntimeImpl("", "", []string{})
 
 	// Runtime is the basic network + client test case with runtime support.
 	Runtime scenario.Scenario = newRuntimeImpl("runtime", "simple-keyvalue-client", nil)
@@ -69,51 +67,36 @@ type runtimeImpl struct {
 
 	clientBinary string
 	clientArgs   []string
-
-	clientBinaryDir  string
-	runtimeBinaryDir string
-	runtimeLoader    string
-	TEEHardware      string
-
-	iasMock bool
 }
 
 func newRuntimeImpl(name, clientBinary string, clientArgs []string) *runtimeImpl {
-	return &runtimeImpl{
-		e2eImpl:          *newE2eImpl("runtime/" + name),
-		clientBinary:     clientBinary,
-		clientArgs:       clientArgs,
-		clientBinaryDir:  "",
-		runtimeBinaryDir: "",
-		runtimeLoader:    "oasis-core-runtime-loader",
-		TEEHardware:      "",
+	// Empty scenario name is used for registering global parameters only.
+	fullName := "runtime"
+	if name != "" {
+		fullName += "/" + name
 	}
+
+	sc := &runtimeImpl{
+		e2eImpl:      *newE2eImpl(fullName),
+		clientBinary: clientBinary,
+		clientArgs:   clientArgs,
+	}
+
+	sc.flags.String(cfgClientBinaryDir, "", "path to the client binaries directory")
+	sc.flags.String(cfgRuntimeBinaryDir, "", "path to the runtime binaries directory")
+	sc.flags.String(cfgRuntimeLoader, "oasis-core-runtime-loader", "path to the runtime loader")
+	sc.flags.String(cfgTEEHardware, "", "TEE hardware to use")
+	sc.flags.Bool(cfgIasMock, true, "if mock IAS service should be used")
+
+	return sc
 }
 
 func (sc *runtimeImpl) Clone() scenario.Scenario {
 	return &runtimeImpl{
-		e2eImpl:          sc.e2eImpl.Clone(),
-		clientBinary:     sc.clientBinary,
-		clientArgs:       sc.clientArgs,
-		clientBinaryDir:  sc.clientBinaryDir,
-		runtimeBinaryDir: sc.runtimeBinaryDir,
-		runtimeLoader:    sc.runtimeLoader,
-		TEEHardware:      sc.TEEHardware,
-		iasMock:          sc.iasMock,
+		e2eImpl:      sc.e2eImpl.Clone(),
+		clientBinary: sc.clientBinary,
+		clientArgs:   sc.clientArgs,
 	}
-}
-
-func (sc *runtimeImpl) Parameters() *flag.FlagSet {
-	f := sc.e2eImpl.Parameters()
-	f.StringVar(&sc.clientBinaryDir, cfgClientBinaryDir, sc.clientBinaryDir, "path to the client binaries directory")
-	f.StringVar(&sc.runtimeBinaryDir, cfgRuntimeBinaryDir, sc.runtimeBinaryDir, "path to the runtime binaries directory")
-	f.StringVar(&sc.runtimeLoader, cfgRuntimeLoader, sc.runtimeLoader, "path to the runtime loader")
-	f.StringVar(&sc.TEEHardware, cfgTEEHardware, sc.TEEHardware, "TEE hardware to use")
-	// XXX: change the default to `true` after:
-	// https://github.com/oasislabs/oasis-core/issues/2897
-	f.BoolVar(&sc.iasMock, cfgIasMock, sc.iasMock, "if mock IAS service should be used")
-
-	return f
 }
 
 func (sc *runtimeImpl) PreInit(childEnv *env.Env) error {
@@ -121,8 +104,12 @@ func (sc *runtimeImpl) PreInit(childEnv *env.Env) error {
 }
 
 func (sc *runtimeImpl) Fixture() (*oasis.NetworkFixture, error) {
+	teeStr, err := sc.flags.GetString(cfgTEEHardware)
+	if err != nil {
+		return nil, err
+	}
 	var tee node.TEEHardware
-	err := tee.FromString(sc.TEEHardware)
+	err = tee.FromString(teeStr)
 	if err != nil {
 		return nil, err
 	}
@@ -138,19 +125,30 @@ func (sc *runtimeImpl) Fixture() (*oasis.NetworkFixture, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	nodeBinary, err := sc.flags.GetString(cfgNodeBinary)
+	if err != nil {
+		return nil, err
+	}
+	runtimeLoader, err := sc.flags.GetString(cfgRuntimeLoader)
+	if err != nil {
+		return nil, err
+	}
+	iasMock, err := sc.flags.GetBool(cfgIasMock)
+	if err != nil {
+		return nil, err
+	}
 	return &oasis.NetworkFixture{
 		TEE: oasis.TEEFixture{
 			Hardware: tee,
 			MrSigner: mrSigner,
 		},
 		Network: oasis.NetworkCfg{
-			NodeBinary:                        sc.nodeBinary,
-			RuntimeSGXLoaderBinary:            sc.runtimeLoader,
+			NodeBinary:                        nodeBinary,
+			RuntimeSGXLoaderBinary:            runtimeLoader,
 			DefaultLogWatcherHandlerFactories: DefaultRuntimeLogWatcherHandlerFactories,
 			ConsensusGasCostsTxByte:           1,
 			IAS: oasis.IASCfg{
-				Mock: sc.iasMock,
+				Mock: iasMock,
 			},
 		},
 		Entities: []oasis.EntityCfg{
@@ -251,12 +249,17 @@ func (sc *runtimeImpl) start(childEnv *env.Env) (<-chan error, *exec.Cmd, error)
 }
 
 func (sc *runtimeImpl) resolveClientBinary(clientBinary string) string {
-	return filepath.Join(sc.clientBinaryDir, clientBinary)
+	cbDir, _ := sc.flags.GetString(cfgClientBinaryDir)
+	return filepath.Join(cbDir, clientBinary)
 }
 
 func (sc *runtimeImpl) resolveRuntimeBinary(runtimeBinary string) (string, error) {
 	var tee node.TEEHardware
-	err := tee.FromString(sc.TEEHardware)
+	teeStr, err := sc.flags.GetString(cfgTEEHardware)
+	if err != nil {
+		return "", err
+	}
+	err = tee.FromString(teeStr)
 	if err != nil {
 		return "", err
 	}
@@ -269,7 +272,12 @@ func (sc *runtimeImpl) resolveRuntimeBinary(runtimeBinary string) (string, error
 		runtimeExt = ".sgxs"
 	}
 
-	return filepath.Join(sc.runtimeBinaryDir, runtimeBinary+runtimeExt), nil
+	rtBinDir, err := sc.flags.GetString(cfgRuntimeBinaryDir)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(rtBinDir, runtimeBinary+runtimeExt), nil
 }
 
 func (sc *runtimeImpl) resolveDefaultKeyManagerBinary() (string, error) {

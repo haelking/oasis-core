@@ -46,7 +46,11 @@ func (sc *restorePrevious) Fixture() (*oasis.NetworkFixture, error) {
 
 func (sc *restorePrevious) Run(childEnv *env.Env) error {
 	// Restore tests use a fixed genesis that only works on non-TEE environments.
-	if sc.TEEHardware != "" {
+	teeStr, err := sc.flags.GetString(cfgTEEHardware)
+	if err != nil {
+		return err
+	}
+	if teeStr != "" {
 		sc.logger.Info("skipping test due to incompatible TEE hardware")
 		return nil
 	}

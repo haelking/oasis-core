@@ -65,7 +65,11 @@ func (sc *gasFeesImpl) Fixture() (*oasis.NetworkFixture, error) {
 	}
 
 	var tee node.TEEHardware
-	err = tee.FromString(sc.TEEHardware)
+	teeStr, err := sc.flags.GetString(cfgTEEHardware)
+	if err != nil {
+		return nil, err
+	}
+	err = tee.FromString(teeStr)
 	if err != nil {
 		return nil, err
 	}
@@ -78,9 +82,17 @@ func (sc *gasFeesImpl) Fixture() (*oasis.NetworkFixture, error) {
 		Hardware: tee,
 		MrSigner: mrSigner,
 	}
+	nodeBinary, err := sc.flags.GetString(cfgNodeBinary)
+	if err != nil {
+		return nil, err
+	}
+	runtimeLoader, err := sc.flags.GetString(cfgRuntimeLoader)
+	if err != nil {
+		return nil, err
+	}
 	f.Network = oasis.NetworkCfg{
-		NodeBinary:                        sc.nodeBinary,
-		RuntimeSGXLoaderBinary:            sc.runtimeLoader,
+		NodeBinary:                        nodeBinary,
+		RuntimeSGXLoaderBinary:            runtimeLoader,
 		EpochtimeMock:                     true,
 		StakingGenesis:                    "tests/fixture-data/gas-fees/staking-genesis.json",
 		DefaultLogWatcherHandlerFactories: DefaultRuntimeLogWatcherHandlerFactories,
